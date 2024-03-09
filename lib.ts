@@ -1,23 +1,16 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { redirect } from "next/navigation";
+
 import React from "react";
 export const APP_NAME = "SpeckleReactDemo";
 export const TOKEN = `${APP_NAME}.AuthToken`;
 export const REFRESH_TOKEN = `${APP_NAME}.RefreshToken`;
 export const CHALLENGE = `${APP_NAME}.Challenge`;
 
-
-// Create an auth context
-export const AuthContext = React.createContext({
-  token: null as string | null,
-  refreshToken: null as string | null,
-  login: () => { },
-  exchangeAccessCode: (accessCode: string) => Promise.resolve(),
-  logOut: () => { }
-})
-
-export const SERVER_URL = process.env.REACT_APP_SERVER_URL ?? "https://speckle.xyz";
+export const SERVER_URL =
+  process.env.REACT_APP_SERVER_URL ?? "https://speckle.xyz";
 const SPECKLE_APP_ID = process.env.REACT_APP_APP_ID ?? "cafc6e9bf6";
 const SPECKLE_APP_SECRET = process.env.REACT_APP_APP_SECRET ?? "907563db09";
 
@@ -25,10 +18,10 @@ const secretKey = "secret";
 const key = new TextEncoder().encode(secretKey);
 
 export async function encrypt(payload: any) {
-  return await new SignJWT(payload)
+  return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("10 sec from now")
+    .setExpirationTime("2h") // Consider setting a longer expiration time for practical use
     .sign(key);
 }
 
@@ -39,32 +32,29 @@ export async function decrypt(input: string): Promise<any> {
   return payload;
 }
 
-export async function login(formData: FormData) {
-  // Verify credentials && get the user
-
-  const user = { email: formData.get("email"), name: "John" };
+export async function login() {
 
   // Create the session
   const expires = new Date(Date.now() + 10 * 1000);
-  const session = await encrypt({ user, expires });
+  const session = await encrypt({ expires });
+  // Generate random challenge
+  var challenge =
+    Math.random().toString(36).substring(2, 15) +
+    Math.random().toString(36).substring(2, 15);
+  // Save challenge in localStorage
+  cookies().set(CHALLENGE, challenge);
+  const redirectUri = `${SERVER_URL}/your-callback-endpoint`; // Adjust with your actual redirect URI
+  const speckleAuthUrl = `${SERVER_URL}/authn/verify/${SPECKLE_APP_ID}/${challenge}?redirect_uri=${encodeURIComponent(
+    redirectUri
+  )}`;
+redirect(speckleAuthUrl);
+  cookies().set("session", session, { expires, httpOnly: true });
 
 
-
-         // Generate random challenge
-         var challenge =
-         Math.random()
-             .toString(36)
-             .substring(2, 15) +
-         Math.random()
-             .toString(36)
-             .substring(2, 15)
-     // Save challenge in localStorage
-     localStorage.setItem(CHALLENGE, challenge)
-     // Send user to auth page
-     NextResponse.redirect(`${SERVER_URL}/authn/verify/${SPECKLE_APP_ID}/${challenge}`);
+  // Send user to auth page
+  //NextResponse.redirect(`${SERVER_URL}/authn/verify/${SPECKLE_APP_ID}/${challenge}`);
 
   // Save the session in a cookie
-  cookies().set("session", session, { expires, httpOnly: true });
 }
 
 export async function logout() {

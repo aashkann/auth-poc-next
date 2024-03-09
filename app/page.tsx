@@ -6,15 +6,14 @@ export default async function Page() {
   return (
     <section>
       <form
-        action={async (formData) => {
+        action={async () => {
           "use server";
-          await login(formData);
+          await login();
           redirect("/");
         }}
       >
-        <input type="email" placeholder="Email" />
         <br />
-        <button type="submit">Login</button>
+        <button type="submit">Login with Speckle</button>
       </form>
       <form
         action={async () => {
