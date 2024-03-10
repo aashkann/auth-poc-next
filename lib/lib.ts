@@ -2,20 +2,30 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { redirect } from "next/navigation";
+import React from 'react'
 
-import React from "react";
+
 export const APP_NAME = "SpeckleReactDemo";
 export const TOKEN = `${APP_NAME}.AuthToken`;
 export const REFRESH_TOKEN = `${APP_NAME}.RefreshToken`;
 export const CHALLENGE = `${APP_NAME}.Challenge`;
 
-export const SERVER_URL =
-  process.env.REACT_APP_SERVER_URL ?? "https://speckle.xyz";
+export const SERVER_URL = process.env.REACT_APP_SERVER_URL ?? "https://speckle.xyz";
 const SPECKLE_APP_ID = process.env.REACT_APP_APP_ID ?? "cafc6e9bf6";
 const SPECKLE_APP_SECRET = process.env.REACT_APP_APP_SECRET ?? "907563db09";
 
 const secretKey = "secret";
 const key = new TextEncoder().encode(secretKey);
+
+// Define the interface
+export interface AuthContextType {
+  token: string | null;
+  refreshToken: string | null;
+  login: () => void;
+  exchangeAccessCode: (accessCode: string) => Promise<void>;
+  logOut: () => void;
+}
+
 
 export async function encrypt(payload: any) {
   return new SignJWT(payload)
@@ -43,18 +53,10 @@ export async function login() {
     Math.random().toString(36).substring(2, 15);
   // Save challenge in localStorage
   cookies().set(CHALLENGE, challenge);
-  const redirectUri = `${SERVER_URL}/your-callback-endpoint`; // Adjust with your actual redirect URI
-  const speckleAuthUrl = `${SERVER_URL}/authn/verify/${SPECKLE_APP_ID}/${challenge}?redirect_uri=${encodeURIComponent(
-    redirectUri
-  )}`;
-redirect(speckleAuthUrl);
+  const redirectUri = `${SERVER_URL}/api/speckle-callback`; // Adjust with your actual redirect URI
+  const speckleAuthUrl = `${SERVER_URL}/authn/verify/${SPECKLE_APP_ID}/${challenge}?redirect_uri=${encodeURIComponent(redirectUri)}`;
+  redirect(speckleAuthUrl);
   cookies().set("session", session, { expires, httpOnly: true });
-
-
-  // Send user to auth page
-  //NextResponse.redirect(`${SERVER_URL}/authn/verify/${SPECKLE_APP_ID}/${challenge}`);
-
-  // Save the session in a cookie
 }
 
 export async function logout() {
@@ -85,11 +87,11 @@ export async function updateSession(request: NextRequest) {
   return res;
 }
 
-const exchangeAccessCode = async (accessCode: string) => {
+export async function exchangeAccessCode(accessCode: string): Promise<{ token: string, refreshToken: string }> {
   // Get the token and refreshToken from localStorage
-  const [token, setToken] = React.useState(localStorage.getItem(TOKEN));
+  const [token, setToken] = React.useState(cookies().get(TOKEN));
   const [refreshToken, setRefreshToken] = React.useState(
-    localStorage.getItem(REFRESH_TOKEN)
+    cookies().get(REFRESH_TOKEN)
   );
 
   var res = await fetch(`${SERVER_URL}/auth/token/`, {
@@ -101,20 +103,27 @@ const exchangeAccessCode = async (accessCode: string) => {
       accessCode: accessCode,
       appId: SPECKLE_APP_ID,
       appSecret: SPECKLE_APP_SECRET,
-      challenge: localStorage.getItem(CHALLENGE),
+      challenge: cookies().get(CHALLENGE),
     }),
   });
-  var data = await res.json();
+
+  if (!res.ok) {
+    throw new Error('Failed to exchange access code for tokens');
+  }
+
+  const data = await response.json();
+  //return { token: data.token, refreshToken: data.refreshToken };
+
 
   if (data.token) {
     // If retrieving the token was successful, remove challenge and set the new token and refresh token
 
     cookies().set(TOKEN, data.token, { secure: true });
-    cookies().set(REFRESH_TOKEN, data.refreshToken, { secure: true });
+    cookies().set(REFRESH_TOKEN, data.refreshToken, { secure: true,     httpOnly: true    });
 
-    localStorage.removeItem(CHALLENGE);
-    localStorage.setItem(TOKEN, data.token);
-    localStorage.setItem(REFRESH_TOKEN, data.refreshToken);
+    cookies().delete(CHALLENGE);
+    cookies().set(TOKEN, data.token);
+    cookies().set(REFRESH_TOKEN, data.refreshToken);
     setToken(data.token);
     setRefreshToken(data.refreshToken);
   }

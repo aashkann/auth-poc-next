@@ -1,23 +1,29 @@
-// This could be an API route in Next.js, e.g., /api/speckle-callback
+// pages/api/speckle-callback.ts
 
-export default async function speckleCallback(req, res) {
-    const { query } = req;
-    const { code } = query; // Assuming Speckle returns an authorization code in the query parameters
-  
-    if (!code) {
-      return res.status(400).send("Authorization code is required.");
-    }
-  
-    try {
-      // Exchange the code for tokens
-      const tokens = await exchangeAccessCode(code); // Implement this function to exchange the code for tokens
-      
-      // Redirect back to the main page, or handle the tokens as needed
-      res.writeHead(302, { Location: '/' });
-      res.end();
-    } catch (error) {
-      console.error(error);
-      res.status(500).send("Internal Server Error");
-    }
+import { NextApiRequest, NextApiResponse } from 'next';
+import { exchangeAccessCode } from '../../lib/auth'; // Adjust the import path as needed
+import { cookies } from 'next/headers';
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const requestCookies = cookies(req);
+  const responseCookies = cookies(res);
+
+  const { code } = req.query;
+  if (!code || typeof code !== 'string') {
+    return res.status(400).json({ error: 'Authorization code is required.' });
   }
-  
+
+  try {
+    const { token, refreshToken } = await exchangeAccessCode(code);
+
+    // Securely set tokens in HTTPOnly cookies
+    responseCookies.set('token', token, { httpOnly: true, secure: true, path: '/', maxAge: 3600 });
+    responseCookies.set('refreshToken', refreshToken, { httpOnly: true, secure: true, path: '/', maxAge: 86400 });
+
+    // Redirect to home page or another destination without the access code in the URL
+    res.redirect(302, '/');
+  } catch (error) {
+    console.error('Error exchanging access code:', error);
+    return res.status(500).json({ error: 'Internal Server Error' });
+  }
+}
